@@ -1,0 +1,216 @@
+
+---
+title: "Human Activity Recognition Prediction Model"
+output: html_document
+---
+# Background
+
+Human Activity Recognition - HAR - has emerged as a key research area in the last years and is gaining increasing attention by the pervasive computing research community. One of the potential applications for HAR, is supporting weight-loss programs, and digital assistants for weight lifting exercises. 
+The Weight Lifting Exercises dataset investigates "how (well)" an activity was performed by the wearer of the various sensors. 
+
+This assignment is an attempt at building a model which can accurately predict the class of an activity performed
+
+# Prediction Study Design
+
+The relative order of importance of the study will be as follows 
+
+question > data > features > algorithms > evaluation
+
+Caret package will be used for this assignment
+
+
+## 1. Question
+
+This assignment consists of building a model that can predict the different fashions in which six participants performed 10 repetitions of the Unilateral Dumbbell Biceps Curl :
+
+      * exactly according to the specification (Class A),
+      
+      * throwing the elbows to the front (Class B),
+        
+      * lifting the dumbbell only halfway (Class C),
+          
+      * lowering the dumbbell only halfway (Class D)
+          
+      * throwing the hips to the front (Class E)
+  
+  
+
+## 2. Data and Features
+
+The plan for data is as follows:
+
+a) Read in the training data
+b) Features:
+    i) Identify all features that have "NA" and remove these columns
+    ii) Identify near zero variance columns and remove these columns
+    iii) Identify factor variables that are not needed for the analysis. Columns 1:6 are removed
+c) Data Slicing:
+   Data will be partitioned 75% training, 25% testing proportion. Once partitioned a check will be done to see if the classes are similarly spread across training and testing sets. Percentage distribution of classes across data partitions is as follows
+
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+library(caret)
+set.seed(125)
+
+har<-read.csv("pml-training.csv")
+har<-har[,!apply(is.na(har), 2, any)]
+
+nzv<-nearZeroVar(har)
+har <- har[, -nzv]
+har<-har[,-c(1:6)]
+
+trainIndex = createDataPartition(har$classe,p=0.75,list=FALSE)
+training = har[trainIndex,]
+testing = har[-trainIndex,]
+```
+
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+Original_Distribution<- round(100*prop.table(table(har$classe)), 1)
+Train_Distribution<-round(100*prop.table(table(training$classe)), 1)
+Test_Distribution<-round(100*prop.table(table(testing$classe)), 1)
+```
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="asis"}
+df <- as.data.frame(cbind(Original_Distribution, Train_Distribution, Test_Distribution))
+colnames(df) <- c("Original Distribution in %", "Training set Distribution in %", "Test set Distribution in %")
+library(xtable)
+print(xtable(df), type = "html")
+```
+
+## 3. Algorithms
+
+Three models will be used namely CART, Stochastic Gradient Boosting and Random Forest. The following steps will be carried out for each model.
+
+  * Tuning parameters will be set 
+  * Center and Scale preprocessing will be used
+  * K Fold Cross validation will be used for each method
+  * Model plots will be drawn
+  * Predictions will be made using the testing partition 
+  * Confusion Matrix will be drawn
+  * Accuracy of each model will be determined
+  
+### 3.1 CART
+
+#### Confusion Matrix for CART
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=10)
+
+rpartfit<-train(classe~.,preProcess=c("center","scale"), trControl=ctrl,method="rpart",data=training,metric="Accuracy")
+
+rpartpred<-predict(rpartfit,newdata=testing)
+rpartconfmat <- confusionMatrix(rpartpred, testing$classe)
+rpartconfmat$table
+```
+
+#### CART plot
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="asis"}
+
+library(rattle); 
+library(rpart.plot)
+fancyRpartPlot(rpartfit$finalModel, main="Human Activity Recognition Tree")
+```
+
+#### CART Accuracy
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+
+rpartconfmat$overall[1:5]
+
+```
+
+### 3.2 GBM
+
+#### Confusion Matrix for GBM
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="hide"}
+
+ctrl <- trainControl(method="repeatedcv", number=10, repeats=2)
+gbmfit<-train(classe~.,preProcess=c("center","scale"),method="gbm",data=training,trControl=ctrl,metric="Accuracy")
+```
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+gbmpred<-predict(gbmfit,newdata=testing)
+gbmconfmat <- confusionMatrix(gbmpred, testing$classe)
+gbmconfmat$table
+```
+
+#### GBM plot
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="asis"}
+
+plot(gbmfit)
+
+```
+
+#### GBM Accuracy
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+
+gbmconfmat$overall[1:5]
+
+```
+### 3.3 Random Forest
+
+#### Confusion Matrix for RF
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="hide"}
+
+ctrl <- trainControl(method="repeatedcv", number=5)
+rffit<-train(classe~.,preProcess=c("center","scale"),method="rf",data=training,trControl=ctrl,metric="Accuracy")
+```
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+rfpred<-predict(rffit,newdata=testing)
+rfconfmat <- confusionMatrix(rfpred, testing$classe)
+rfconfmat$table
+
+```
+
+#### RF plot
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE,results="asis"}
+
+VarImportance <- varImp(rffit)
+plot(VarImportance, main = "Top 15 most influencial Predictors", top = 15)
+
+```
+
+#### RF Accuracy
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+
+rfconfmat$overall[1:5]
+
+```
+
+
+## 4.Evaluation
+
+The model with the best accuracy will be chosen as the final model. The assignment test data of 20 cases will be then predicted using the winning model
+
+Comparison of the 3 models:
+
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+mod1<-data.frame(TrueNegative=rpartconfmat$table[1,1],TruePositive=rpartconfmat$table[2,2], FalseNegative=rpartconfmat$table[1,2],FalsePositive=rpartconfmat$table[2,1],Accuracy=rpartconfmat$overall["Accuracy"])
+rownames(mod1)<-c("CART")
+
+
+mod2<-data.frame(TrueNegative=gbmconfmat$table[1,1],TruePositive=gbmconfmat$table[2,2], FalseNegative=gbmconfmat$table[1,2],FalsePositive=gbmconfmat$table[2,1],Accuracy=gbmconfmat$overall["Accuracy"])
+rownames(mod2)<-c("GBM")
+
+mod3<-data.frame(TrueNegative=rfconfmat$table[1,1],TruePositive=rfconfmat$table[2,2], FalseNegative=rfconfmat$table[1,2],FalsePositive=rfconfmat$table[2,1],Accuracy=rfconfmat$overall["Accuracy"])
+rownames(mod3)<-c("RF")
+
+Final<-rbind(mod1,mod2,mod3)
+Final
+```
+
+The Random Forest model wins with an accuracy of 99%  !
+
+
+
